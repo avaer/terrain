@@ -1,0 +1,700 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>xrpackage | trees</title>
+  <link rel=icon type="image/png" href="favicon.png">
+  <link href="/index.css" rel=stylesheet>
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700&display=swap" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/0735724151.js" crossorigin="anonymous"></script>
+</head>
+
+<body class="header-gap">
+  <header class=header id=header>
+    <a href="/" class="nav icon">山</a>
+    <nav class="selector nav bar" id=selector>
+      <i class="fa fa-user head"></i>
+      <div class=header-label id=header-label>Log in</div>
+      <i class="fa fa-chevron-down tail"></i>
+      <div class=selections id=selections>
+        <a href="run.html" class=selection id=run-mode>
+          <i class="fa fa-play"></i>
+          <div class=wrap>
+            <h3>Run mode</h3>
+            <p>Switch to run mode</p>
+          </div>
+        </a>
+        <a href="edit.html" class=selection id=edit-mode>
+          <i class="fa fa-pencil"></i>
+          <div class=wrap>
+            <h3>Edit mode</h3>
+            <p>You are currently editing this world</p>
+          </div>
+        </a>
+        <a href="browse.html" class="selection dim">
+          <i class="fa fa-solar-system"></i>
+          <div class=wrap>
+            <h3>Browse packages</h3>
+            <p>Explore the XRPackage registry</p>
+          </div>
+        </a>
+        <a href="help.html" class=selection>
+          <i class="fa fa-book"></i>
+          <div class=wrap>
+            <h3>Documentation</h3>
+            <p>Learn how to make packages and worlds</p>
+          </div>
+        </a>
+      </div>
+    </nav>
+
+    <form class="login-form phase-1" id=login-form>
+      <div class=phase-content>
+        <div class=login-notice id=login-notice></div>
+        <div class=login-error id=login-error></div>
+      </div>
+      <div class="phase-content phase-1-content">
+        <input type=email placeholder="your@email.com" id=login-email>
+        <input type=submit value="Log in" class="button highlight">
+      </div>
+      <div class="phase-content phase-2-content">
+        <input type=text placeholder="Verification code" id=login-verification-code>
+        <input type=submit value="Verify" class="button highlight">
+      </div>
+      <div class="phase-content phase-3-content">
+        <nav class=user-button id=user-button>
+          <img src="favicon.ico">
+          <span class=name id=login-email-static></span>
+          <input type=submit value="Log out" class="button highlight">
+        </nav>
+      </div>
+      <div class="phase-content phaseless-content">
+        <div>Working...</div>
+      </div>
+    </form>
+  </header>
+
+<script type=module>
+import * as THREE from './three.module.js';
+import {OrbitControls} from './OrbitControls.js';
+
+const CHUNK_HEADER_SIZE = 2 * 4;
+const NUM_SLOTS = 64 * 64;
+const OBJECT_SLOT_FIELDS = 1 + 10 + 1;
+const OBJECT_SLOT_SIZE = OBJECT_SLOT_FIELDS * 4;
+const VEGETATION_SLOT_FIELDS = 1 + 10;
+const VEGETATION_SLOT_SIZE = VEGETATION_SLOT_FIELDS * 4;
+const TERRAIN_BUFFER_SIZE = 512 * 1024;
+const OBJECT_BUFFER_SIZE = NUM_SLOTS * OBJECT_SLOT_SIZE;
+const VEGETATION_BUFFER_SIZE = NUM_SLOTS * VEGETATION_SLOT_SIZE;
+const BLOCK_BUFFER_SIZE = 16 * 128 * 16 * 4;
+const LIGHT_SLOT_FIELDS = 4;
+const LIGHT_SLOT_SIZE = LIGHT_SLOT_FIELDS * 4;
+const LIGHT_BUFFER_SIZE = NUM_SLOTS * LIGHT_SLOT_SIZE;
+const TRAILER_SLOTS = 32;
+const CHUNK_TRAILER_SIZE = TRAILER_SLOTS * 4;
+const CHUNK_SIZE = CHUNK_HEADER_SIZE + TERRAIN_BUFFER_SIZE + OBJECT_BUFFER_SIZE + VEGETATION_BUFFER_SIZE + BLOCK_BUFFER_SIZE + LIGHT_BUFFER_SIZE + CHUNK_TRAILER_SIZE;
+import {
+  NUM_CELLS,
+  NUM_CELLS_OVERSCAN,
+  NUM_CELLS_HEIGHT,
+
+  NUM_CHUNKS_HEIGHT,
+
+  NUM_RENDER_GROUPS,
+
+  GEOMETRY_BUFFER_SIZE,
+
+  TEXTURE_SIZE,
+
+  DEFAULT_SEED,
+
+  NUM_POSITIONS_CHUNK,
+
+  PEEK_FACES,
+  PEEK_FACE_INDICES,
+} from './constants.js';
+import murmur from './murmur.js';
+
+const _requestImage = src => new Promise((accept, reject) => {
+  const img = document.createElement('img');
+  img.src = src;
+  img.onload = () => {
+    accept(img);
+  };
+  img.onerror = reject;
+});
+const _align = (n, alignment) => {
+  let alignDiff = n % alignment;
+  if (alignDiff > 0) {
+    n += alignment - alignDiff;
+  }
+  return n;
+};
+
+const BIOMES_SIZE = _align(NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN * Uint8Array.BYTES_PER_ELEMENT, Float32Array.BYTES_PER_ELEMENT);
+const TEMPERATURE_SIZE = _align(1 * Uint8Array.BYTES_PER_ELEMENT, Float32Array.BYTES_PER_ELEMENT);
+const HUMIDITY_SIZE = _align(1 * Uint8Array.BYTES_PER_ELEMENT, Float32Array.BYTES_PER_ELEMENT);
+const ELEVATIONS_SIZE = NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN * Float32Array.BYTES_PER_ELEMENT;
+const ETHER_SIZE = ((NUM_CELLS + 1) * (NUM_CELLS_HEIGHT + 1) * (NUM_CELLS + 1)) * Float32Array.BYTES_PER_ELEMENT;
+const WATER_SIZE  = ((NUM_CELLS + 1) * (NUM_CELLS_HEIGHT + 1) * (NUM_CELLS + 1)) * Float32Array.BYTES_PER_ELEMENT;
+const LAVA_SIZE = ((NUM_CELLS + 1) * (NUM_CELLS_HEIGHT + 1) * (NUM_CELLS + 1)) * Float32Array.BYTES_PER_ELEMENT;
+const POSITIONS_SIZE = NUM_POSITIONS_CHUNK * Float32Array.BYTES_PER_ELEMENT;
+const INDICES_SIZE = NUM_POSITIONS_CHUNK * Uint32Array.BYTES_PER_ELEMENT;
+const COLORS_SIZE = NUM_POSITIONS_CHUNK * Float32Array.BYTES_PER_ELEMENT;
+const STATIC_HEIGHTFIELD_SIZE = NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN * Float32Array.BYTES_PER_ELEMENT;
+const ATTRIBUTE_RANGES_SIZE = NUM_CHUNKS_HEIGHT * 6 * Uint32Array.BYTES_PER_ELEMENT;
+const INDEX_RANGES_SIZE = NUM_CHUNKS_HEIGHT * 6 * Uint32Array.BYTES_PER_ELEMENT;
+const PEEK_SIZE = 16 * Uint8Array.BYTES_PER_ELEMENT;
+const PEEKS_ARRAY_SIZE = PEEK_SIZE * NUM_CHUNKS_HEIGHT;
+
+(async () => {
+const {promise} = await import('./objectize.js');
+await promise;
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: true,
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.sortObjects = false;
+renderer.physicallyCorrectLights = true;
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 2);
+
+const orbitControls = new OrbitControls(camera, renderer.domElement);
+orbitControls.screenSpacePanning = true;
+orbitControls.enableMiddleZoom = false;
+// orbitControls.update();
+orbitControls.target.set(0, 64, 0);
+
+class Allocator {
+  constructor() {
+    this.offsets = [];
+  }
+  alloc(constructor, size) {
+    const offset = self.Module._malloc(size * constructor.BYTES_PER_ELEMENT);
+    const b = new constructor(self.Module.HEAP8.buffer, self.Module.HEAP8.byteOffset + offset, size);
+    b.offset = offset;
+    this.offsets.push(offset);
+    return b;
+  }
+  freeAll() {
+    for (let i = 0; i < this.offsets.length; i++) {
+      self.Module._doFree(this.offsets[i]);
+    }
+    this.offsets.length = 0;
+  }
+}
+
+const seed = murmur(DEFAULT_SEED);
+// console.log('seed', seed);
+const noiser = Module._make_noiser(seed);
+
+const HEIGHTFIELD_SHADER = {
+  uniforms: {
+    fogColor: {
+      type: '3f',
+      value: new THREE.Color(),
+    },
+    fogDensity: {
+      type: 'f',
+      value: 0,
+    },
+    sunIntensity: {
+      type: 'f',
+      value: 0,
+    },
+  },
+  vertexShader: `\
+    #define LOG2 1.442695
+    precision highp float;
+    precision highp int;
+    uniform float fogDensity;
+    attribute vec3 color;
+    attribute float skyLightmap;
+    attribute float torchLightmap;
+
+    // varying vec3 vPosition;
+    varying vec3 vViewPosition;
+    varying vec3 vColor;
+    varying float vSkyLightmap;
+    varying float vTorchLightmap;
+    // varying float vFog;
+
+    void main() {
+      vColor = color.rgb;
+
+      vec4 mvPosition = modelViewMatrix * vec4( position.xyz, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+
+      // vPosition = position.xyz;
+      vViewPosition = -mvPosition.xyz;
+      vSkyLightmap = skyLightmap;
+      vTorchLightmap = torchLightmap;
+      // float fogDepth = -mvPosition.z;
+      // vFog = 1.0 - exp2( - fogDensity * fogDensity * fogDepth * fogDepth * LOG2 );
+    }
+  `,
+  fragmentShader: `\
+    precision highp float;
+    precision highp int;
+    // uniform vec3 ambientLightColor;
+    uniform float sunIntensity;
+    uniform vec3 fogColor;
+
+    // varying vec3 vPosition;
+    varying vec3 vViewPosition;
+    varying vec3 vColor;
+    varying float vSkyLightmap;
+    varying float vTorchLightmap;
+    // varying float vFog;
+
+    #define saturate(a) clamp( a, 0.0, 1.0 )
+
+    void main() {
+      /* float lightColor = floor(
+        (
+          min((vSkyLightmap * sunIntensity) + vTorchLightmap, 1.0)
+        ) * 4.0 + 0.5
+      ) / 4.0; */
+      vec3 ambientLightColor = vec3(0.5, 0.5, 0.5);
+      float lightColor = 0.1;
+
+      vec3 fdx = vec3( dFdx( vViewPosition.x ), dFdx( vViewPosition.y ), dFdx( vViewPosition.z ) );
+      vec3 fdy = vec3( dFdy( vViewPosition.x ), dFdy( vViewPosition.y ), dFdy( vViewPosition.z ) );
+      vec3 normal = normalize( cross( fdx, fdy ) );
+      float dotNL = saturate( dot( normal, normalize(vViewPosition)) );
+      vec3 irradiance = ambientLightColor + (dotNL * 1.5);
+      vec3 diffuseColor = vColor * irradiance * (0.1 + lightColor * 0.9);
+      // diffuseColor = mix(diffuseColor, fogColor, vFog);
+
+      gl_FragColor = vec4( diffuseColor, 1.0 );
+    }
+  `
+};
+
+const OCEAN_SHADER = {
+  uniforms: {
+    worldTime: {
+      type: 'f',
+      value: 0,
+    },
+    map: {
+      type: 't',
+      value: null,
+    },
+    fogColor: {
+      type: '3f',
+      value: new THREE.Color(),
+    },
+    fogDensity: {
+      type: 'f',
+      value: 0,
+    },
+    sunIntensity: {
+      type: 'f',
+      value: 0,
+    },
+  },
+  vertexShader: `\
+    #define LOG2 1.442695
+    uniform float worldTime;
+    uniform float fogDensity;
+    // "attribute vec3 wave;
+    attribute vec3 color;
+    attribute float skyLightmap;
+    attribute float torchLightmap;
+    // varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vColor;
+    varying float vSkyLightmap;
+    varying float vTorchLightmap;
+    // varying float vFog;
+
+    void main() {
+      /* float ang = wave[0];
+      float amp = wave[1];
+      float speed = wave[2]; */
+      // gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, position.y + ((sin(ang + (speed * worldTime))) * amp), position.z, 1.0);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xyz, 1.0);
+      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+      // vUv = vec2((position.x + position.y) / 16.0 * 4.0, (position.z + position.y) / 16.0 * 4.0 / 16.0);
+      vPosition = position;
+      vColor = color.rgb;
+      vSkyLightmap = skyLightmap;
+      vTorchLightmap = torchLightmap;
+      // float fogDepth = -mvPosition.z;
+      // vFog = 1.0 - exp2( - fogDensity * fogDensity * fogDepth * fogDepth * LOG2 );
+    }
+  `,
+  fragmentShader: `\
+    uniform float worldTime;
+    uniform sampler2D map;
+    uniform vec3 fogColor;
+    uniform float sunIntensity;
+    // varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vColor;
+    varying float vSkyLightmap;
+    varying float vTorchLightmap;
+    // varying float vFog;
+    float speed = 2.0;
+
+    vec4 twoTapSample(
+      float tileOffset,
+      vec2 tileUV,
+      float tileSize,
+      sampler2D atlas
+    ) {
+      //Initialize accumulators
+      vec4 color = vec4(0.0, 0.0, 0.0, 0.0);
+      float totalWeight = 0.0;
+
+      for(int dx=0; dx<2; ++dx) {
+        //Compute coordinate in 2x2 tile patch
+        vec2 tileCoord = vec2(2.0 * fract(0.5 * (tileUV.x + float(dx))), tileUV.y);
+
+        //Weight sample based on distance to center
+        float w = pow(1.0 - abs(tileCoord.x-1.0), 16.0);
+
+        //Compute atlas coord
+        vec2 atlasUV = vec2(tileOffset + tileSize * tileCoord.x, tileCoord.y);
+
+        //Sample and accumulate
+        color += w * texture2D(atlas, atlasUV);
+        totalWeight += w;
+      }
+
+      //Return weighted color
+      return color / totalWeight;
+    }
+
+    void main() {
+      float animationFactor = (speed - abs(mod(worldTime / 1000.0, speed*2.0) - speed)) / speed;
+      float frame1 = mod(floor(animationFactor / 16.0), 1.0);
+      float frame2 = mod(frame1 + 1.0/16.0, 1.0);
+      float mixFactor = fract(animationFactor / 16.0) * 16.0;
+
+      vec2 tileUv = vec2(
+        mod(vPosition.x / 4.0, 1.0),
+        mod(vPosition.z / 4.0 / 16.0, 1.0)
+      );
+      vec3 diffuseColor1 = twoTapSample(
+        vColor.r,
+        tileUv * vec2(1.0, 1.0 - frame1),
+        0.25,
+        map
+      ).rgb;
+      vec3 diffuseColor2 = twoTapSample(
+        vColor.r,
+        tileUv * vec2(1.0, 1.0 - frame2),
+        0.25,
+        map
+      ).rgb;
+      vec3 diffuseColor = mix(diffuseColor1, diffuseColor2, mixFactor).rgb;
+      // diffuseColor *= (0.2 + 0.8 * sunIntensity);
+      // diffuseColor = mix(diffuseColor, fogColor, vFog);
+
+      float lightColor = floor(
+        (
+          min((vSkyLightmap * sunIntensity) + vTorchLightmap, 1.0)
+        ) * 4.0 + 0.5
+      ) / 4.0;
+      vec3 outgoingLight = diffuseColor * (0.2 + lightColor * 0.8);
+      gl_FragColor = vec4(outgoingLight, 0.9);
+    }
+  `
+};
+
+const liquidImg = await _requestImage('./liquid.png');
+const liquidTexture = new THREE.Texture(
+  liquidImg,
+  THREE.UVMapping,
+  THREE.ClampToEdgeWrapping,
+  THREE.ClampToEdgeWrapping,
+  THREE.NearestFilter,
+  THREE.LinearMipMapLinearFilter,
+  THREE.RGBAFormat,
+  THREE.UnsignedByteType,
+  16
+);
+liquidTexture.needsUpdate = true;
+const oceanMaterial = new THREE.ShaderMaterial({
+  uniforms: (() => {
+    const uniforms = THREE.UniformsUtils.clone(OCEAN_SHADER.uniforms);
+    uniforms.map.value = liquidTexture;
+    // uniforms.fogColor.value = scene.fog.color;
+    // uniforms.fogDensity.value = scene.fog.density;
+    return uniforms;
+  })(),
+  vertexShader: OCEAN_SHADER.vertexShader,
+  fragmentShader: OCEAN_SHADER.fragmentShader,
+  // side: THREE.DoubleSide,
+  transparent: true,
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -1,
+});
+/* oceanMaterial.blending = THREE.CustomBlending;
+oceanMaterial.blendEquation = THREE.AddEquation;
+oceanMaterial.blendSrc = THREE.SrcAlphaFactor;/
+oceanMaterial.blendDst = THREE.ZeroFactor; */
+// oceanMaterial.uniformsNeedUpdate = _uniformsNeedUpdateOcean;
+const heightfieldMaterial = new THREE.ShaderMaterial({
+  uniforms: (() => {
+    const uniforms = Object.assign(
+      THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
+      THREE.UniformsUtils.clone(HEIGHTFIELD_SHADER.uniforms)
+    );
+    // uniforms.fogColor.value = scene.fog.color;
+    // uniforms.fogDensity.value = scene.fog.density;
+    return uniforms;
+  })(),
+  vertexShader: HEIGHTFIELD_SHADER.vertexShader,
+  fragmentShader: HEIGHTFIELD_SHADER.fragmentShader,
+  lights: true,
+  extensions: {
+    derivatives: true,
+  },
+});
+// heightfieldMaterial.uniformsNeedUpdate = _uniformsNeedUpdateHeightfield;
+
+const _getChunkMesh = (x, z) => {
+  const allocator = new Allocator();
+
+  const terrainBuffer = new Uint32Array(TERRAIN_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
+  const objectBuffer = new Uint32Array(OBJECT_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
+  const vegetationBuffer = new Uint32Array(VEGETATION_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
+  const blockBuffer = new Uint32Array(BLOCK_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
+  const lightBuffer = new Float32Array(LIGHT_BUFFER_SIZE / Float32Array.BYTES_PER_ELEMENT);
+
+  /* const oldTerrainBuffer = terrainBuffer;
+  const oldTerrainData = protocolUtils.parseTerrainData(oldTerrainBuffer.buffer, oldTerrainBuffer.byteOffset);
+  const oldBiomes = oldTerrainData.biomes.slice();
+  const oldTemperature = oldTerrainData.temperature.slice();
+  const oldHumidity = oldTerrainData.humidity.slice();
+  const oldElevations = oldTerrainData.elevations.slice();
+  const oldEther = oldTerrainData.ether.slice();
+  const oldWater = oldTerrainData.water.slice();
+  const oldLava = oldTerrainData.lava.slice();
+  const oldBiomes = allocator.allocShadowBuffer(oldBiomes);
+  const oldTemperatureAddress = allocator.allocShadowBuffer(oldTemperature);
+  const oldHumidityAddress = allocator.allocShadowBuffer(oldHumidity);
+  const oldElevationsAddress = allocator.allocShadowBuffer(oldElevations);
+  const oldEtherAddress = allocator.allocShadowBuffer(oldEther);
+  const oldWaterAddress = allocator.allocShadowBuffer(oldWater);
+  const oldLavaAddress = allocator.allocShadowBuffer(oldLava); */
+
+  /* if (newEther) {
+    const newEtherAddress = allocator.allocBuffer(newEther);
+    Module._noiser_apply(
+      noiser,
+      chunk.x,
+      chunk.z,
+      oldBiomesAddress,
+      oldTemperatureAddress,
+      oldHumidityAddress,
+      +false,
+      oldElevationsAddress,
+      +false,
+      oldEtherAddress,
+      +false,
+      oldWaterAddress,
+      oldLavaAddress,
+      +false,
+      newEtherAddress,
+      newEther.length
+    );
+  } */
+
+  const biomes = allocator.alloc(Uint8Array, BIOMES_SIZE);
+  const temperature = allocator.alloc(Uint8Array, TEMPERATURE_SIZE);
+  const humidity = allocator.alloc(Uint8Array, HUMIDITY_SIZE);
+  const elevations = allocator.alloc(Float32Array, ELEVATIONS_SIZE);
+  const ether = allocator.alloc(Float32Array, ETHER_SIZE);
+  const water = allocator.alloc(Float32Array, WATER_SIZE);
+  const lava = allocator.alloc(Float32Array, LAVA_SIZE);
+  const positions = allocator.alloc(Float32Array, POSITIONS_SIZE);
+  const indices = allocator.alloc(Uint32Array, INDICES_SIZE);
+  const colors = allocator.alloc(Float32Array, COLORS_SIZE);
+  const staticHeightfield = allocator.alloc(Float32Array, STATIC_HEIGHTFIELD_SIZE);
+  const attributeRanges = allocator.alloc(Uint32Array, ATTRIBUTE_RANGES_SIZE);
+  const indexRanges = allocator.alloc(Uint32Array, INDEX_RANGES_SIZE);
+  const peeks = allocator.alloc(Uint8Array, PEEK_SIZE * NUM_CHUNKS_HEIGHT);
+  const peeksArray = Array(NUM_CHUNKS_HEIGHT);
+  for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
+    peeksArray[i] = new Uint8Array(peeks.buffer, peeks.byteOffset + i * PEEK_SIZE, PEEK_SIZE / Uint8Array.BYTES_PER_ELEMENT);
+  }
+
+  Module._noiser_apply(
+    noiser,
+    x,
+    z,
+    biomes.offset,
+    temperature.offset,
+    humidity.offset,
+    +true, // fillBiomes,
+    elevations.offset,
+    +true, // fillElevations,
+    ether.offset,
+    +true, // fillEther,
+    water.offset,
+    lava.offset,
+    +true, // fillLiquid,
+    0, // newEther,
+    0, // numNewEthers
+  );
+
+  // const {attributeRanges, indexRanges, staticHeightfield, peeks} = slab;
+  Module._noiser_fill(
+    noiser,
+    x,
+    z,
+    biomes.offset,
+    elevations.offset,
+    ether.offset,
+    water.offset,
+    lava.offset,
+    positions.offset,
+    indices.offset,
+    attributeRanges.offset,
+    indexRanges.offset,
+    staticHeightfield.offset,
+    colors.offset,
+    peeks.offset
+  );
+
+  const result = {
+    positions: positions.slice(),
+    indices: indices.slice(),
+    attributeRanges: attributeRanges.slice(),
+    indexRanges: indexRanges.slice(),
+    staticHeightfield: staticHeightfield.slice(),
+    colors: colors.slice(),
+    peeks: peeks.slice(),
+  };
+
+  allocator.freeAll();
+
+  return result;
+};
+// const meshes = [];
+const _addMesh = (x, z) => {
+  const meshSpec = _getChunkMesh(x, z);
+  const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks} = meshSpec;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 3));
+
+  for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
+    {
+      const g = geometry.clone();
+      const indexStart = indexRanges[i * 6 + 0];
+      const indexLength = indexRanges[i * 6 + 1];
+      g.setDrawRange(indexStart, indexLength);
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
+      const mesh = new THREE.Mesh(g, heightfieldMaterial);
+      mesh.visible = indexLength > 0;
+      mesh.frustumCulled = false;
+      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+    {
+      const g = geometry.clone();
+      const indexStart = indexRanges[i * 6 + 2];
+      const indexLength = indexRanges[i * 6 + 3];
+      g.setDrawRange(indexStart, indexLength);
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
+      const mesh = new THREE.Mesh(g, oceanMaterial);
+      mesh.visible = indexLength > 0;
+      mesh.frustumCulled = false;
+      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+    {
+      const g = geometry.clone();
+      const indexStart = indexRanges[i * 6 + 4];
+      const indexLength = indexRanges[i * 6 + 5];
+      g.setDrawRange(indexStart, indexLength);
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
+      const mesh = new THREE.Mesh(g, oceanMaterial);
+      mesh.visible = indexLength > 0;
+      mesh.frustumCulled = false;
+      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+  }
+};
+window.meshes = [];
+for (let x = -2; x <= 2; x++) {
+  for (let z = -1; z <= 1; z++) {
+    console.log('add mesh', x, z);
+    _addMesh(x, z);
+  }
+}
+
+/* const landObject = (() => {
+  const mesh = new THREE.Object3D();
+  // mesh.updateModelViewMatrix = _updateModelViewMatrix;
+  // mesh.updateNormalMatrix = _updateNormalMatrix;
+  // mesh.renderList = [];
+  return mesh;
+})();
+scene.add(landObject);
+const liquidObject = (() => {
+  const mesh = new THREE.Object3D();
+  // mesh.updateModelViewMatrix = _updateModelViewMatrix;
+  // mesh.updateNormalMatrix = _updateNormalMatrix;
+  // mesh.renderList = [];
+  return mesh;
+})();
+scene.add(liquidObject); */
+
+
+
+
+
+
+
+function animate() {
+  orbitControls.update();
+
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(animate);
+
+/* let currentSession = null;
+function onSessionStarted(session) {
+  session.addEventListener('end', onSessionEnded);
+
+  renderer.xr.setSession(session);
+
+  currentSession = session;
+}
+function onSessionEnded() {
+  currentSession.removeEventListener('end', onSessionEnded);
+
+  currentSession = null;
+}
+navigator.xr && navigator.xr.requestSession('immersive-vr', {
+  optionalFeatures: [
+    'local-floor',
+    'bounded-floor',
+  ],
+}).then(onSessionStarted); */
+
+})();
+
+</script>
+</body>
+
+</html>
