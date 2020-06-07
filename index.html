@@ -599,8 +599,10 @@ const _getChunkMesh = (x, z) => {
 };
 // const meshes = [];
 const _addMesh = (x, z) => {
+  const o = new THREE.Object3D();
+
   const meshSpec = _getChunkMesh(x, z);
-  console.log('mesh spec', x, z, meshSpec);
+  // console.log('mesh spec', x, z, meshSpec);
   const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks, cleanup} = meshSpec;
 
   for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
@@ -630,8 +632,8 @@ const _addMesh = (x, z) => {
         mesh.visible = indexLength > 0;
         mesh.frustumCulled = false;
         // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-        scene.add(mesh);
-        meshes.push(mesh);
+        // scene.add(mesh);
+        o.add(mesh);
       }
     }
     {
@@ -660,8 +662,8 @@ const _addMesh = (x, z) => {
         mesh.visible = indexLength > 0;
         mesh.frustumCulled = false;
         // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-        scene.add(mesh);
-        meshes.push(mesh);
+        // scene.add(mesh);
+        o.add(mesh);
       }
     }
     {
@@ -690,21 +692,30 @@ const _addMesh = (x, z) => {
         mesh.visible = indexLength > 0;
         mesh.frustumCulled = false;
         // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-        scene.add(mesh);
-        meshes.push(mesh);
+        // scene.add(mesh);
+        o.add(mesh);
       }
     }
   }
 
   cleanup();
+
+  o.x = x;
+  o.y = z;
+  o.destroy = () => {
+    o.children.forEach(c => {
+      c.geometry.dispose();
+    });
+  };
+
+  return o;
 };
-window.meshes = [];
 // _addMesh(0, 0);
-for (let x = -4; x <= 4; x++) {
+/* for (let x = -4; x <= 4; x++) {
   for (let z = -4; z <= 4; z++) {
     _addMesh(x, z);
   }
-}
+} */
 
 /* const landObject = (() => {
   const mesh = new THREE.Object3D();
@@ -728,9 +739,38 @@ scene.add(liquidObject); */
 
 
 
-
+let meshes = [];
 function animate() {
   orbitControls.update();
+
+  const currentChunk = new THREE.Vector2(Math.floor(orbitControls.target.x/16), Math.floor(orbitControls.target.z/16));
+  const neededChunks = [];
+  for (let x = -3; x <= 3; x++) {
+    for (let z = -3; z <= 3; z++) {
+      neededChunks.push(
+        currentChunk.clone().add(new THREE.Vector2(x, z))
+      );
+    }
+  }
+  meshes = meshes.filter(mesh => {
+    const {x, y} = mesh;
+    if (!neededChunks.some(chunk => chunk.x === x && chunk.y === y)) {
+      scene.remove(mesh);
+      mesh.destroy();
+      return false;
+    } else {
+      return true;
+    }
+  });
+  for (let i = 0; i < neededChunks.length; i++) {
+    const {x, y} = neededChunks[i];
+    let mesh = meshes.find(mesh => mesh.x === x && mesh.y === y);
+    if (!mesh) {
+      mesh = _addMesh(x, y);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+  }
 
   /* const vrCamera = renderer.xr.getCamera(camera);
   const p = new THREE.Vector3();
