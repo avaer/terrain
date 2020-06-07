@@ -409,7 +409,7 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
     indexRanges[i * 6 + 0] = indexIndex;
     indexRanges[i * 6 + 1] = faceIndex,
 
-    remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
+    // remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
 
     attributeIndex += positionIndex;
     indexIndex += faceIndex;
@@ -443,7 +443,7 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
       indexRanges[i * 6 + 2] = indexIndex;
       indexRanges[i * 6 + 3] = faceIndex;
 
-      remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
+      // remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
 
       attributeIndex += positionIndex;
       indexIndex += faceIndex;
@@ -475,7 +475,7 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
       indexRanges[i * 6 + 4] = indexIndex;
       indexRanges[i * 6 + 5] = faceIndex;
 
-      remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
+      // remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
 
       attributeIndex += positionIndex;
       indexIndex += faceIndex;
