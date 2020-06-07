@@ -282,7 +282,6 @@ const HEIGHTFIELD_SHADER = {
   const img = document.createElement('img');
   img.src = 'grass.png';
   img.onload = () => {
-    console.log('got load', img);
     heightfieldMaterial.uniforms.tex.value.image = img;
     heightfieldMaterial.uniforms.tex.value.needsUpdate = true;
   };
