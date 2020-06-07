@@ -24435,6 +24435,8 @@ function WebGLRenderer( parameters ) {
 
 	}
 
+	this.getGeometries = () => geometries;
+
 	initGLContext();
 
 	// xr
