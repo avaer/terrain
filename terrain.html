@@ -222,8 +222,8 @@ const HEIGHTFIELD_SHADER = {
     // varying vec3 vPosition;
     varying vec3 vViewPosition;
     varying vec3 vColor;
-    varying float vSkyLightmap;
-    varying float vTorchLightmap;
+    // varying float vSkyLightmap;
+    // varying float vTorchLightmap;
     // varying float vFog;
 
     void main() {
@@ -234,8 +234,8 @@ const HEIGHTFIELD_SHADER = {
 
       // vPosition = position.xyz;
       vViewPosition = -mvPosition.xyz;
-      vSkyLightmap = skyLightmap;
-      vTorchLightmap = torchLightmap;
+      // vSkyLightmap = skyLightmap;
+      // vTorchLightmap = torchLightmap;
       // float fogDepth = -mvPosition.z;
       // vFog = 1.0 - exp2( - fogDensity * fogDensity * fogDepth * fogDepth * LOG2 );
     }
@@ -250,8 +250,8 @@ const HEIGHTFIELD_SHADER = {
     // varying vec3 vPosition;
     varying vec3 vViewPosition;
     varying vec3 vColor;
-    varying float vSkyLightmap;
-    varying float vTorchLightmap;
+    // varying float vSkyLightmap;
+    // varying float vTorchLightmap;
     // varying float vFog;
 
     #define saturate(a) clamp( a, 0.0, 1.0 )
@@ -263,7 +263,7 @@ const HEIGHTFIELD_SHADER = {
         ) * 4.0 + 0.5
       ) / 4.0; */
       vec3 ambientLightColor = vec3(0.5, 0.5, 0.5);
-      float lightColor = 0.1;
+      float lightColor = 0.5;
 
       vec3 fdx = vec3( dFdx( vViewPosition.x ), dFdx( vViewPosition.y ), dFdx( vViewPosition.z ) );
       vec3 fdy = vec3( dFdy( vViewPosition.x ), dFdy( vViewPosition.y ), dFdy( vViewPosition.z ) );
@@ -312,8 +312,8 @@ const OCEAN_SHADER = {
     // varying vec2 vUv;
     varying vec3 vPosition;
     varying vec3 vColor;
-    varying float vSkyLightmap;
-    varying float vTorchLightmap;
+    // varying float vSkyLightmap;
+    // varying float vTorchLightmap;
     // varying float vFog;
 
     void main() {
@@ -326,8 +326,8 @@ const OCEAN_SHADER = {
       // vUv = vec2((position.x + position.y) / 16.0 * 4.0, (position.z + position.y) / 16.0 * 4.0 / 16.0);
       vPosition = position;
       vColor = color.rgb;
-      vSkyLightmap = skyLightmap;
-      vTorchLightmap = torchLightmap;
+      // vSkyLightmap = skyLightmap;
+      // vTorchLightmap = torchLightmap;
       // float fogDepth = -mvPosition.z;
       // vFog = 1.0 - exp2( - fogDensity * fogDensity * fogDepth * fogDepth * LOG2 );
     }
@@ -340,8 +340,8 @@ const OCEAN_SHADER = {
     // varying vec2 vUv;
     varying vec3 vPosition;
     varying vec3 vColor;
-    varying float vSkyLightmap;
-    varying float vTorchLightmap;
+    // varying float vSkyLightmap;
+    // varying float vTorchLightmap;
     // varying float vFog;
     float speed = 2.0;
 
@@ -400,11 +400,13 @@ const OCEAN_SHADER = {
       // diffuseColor *= (0.2 + 0.8 * sunIntensity);
       // diffuseColor = mix(diffuseColor, fogColor, vFog);
 
-      float lightColor = floor(
+      /* float lightColor = floor(
         (
           min((vSkyLightmap * sunIntensity) + vTorchLightmap, 1.0)
         ) * 4.0 + 0.5
-      ) / 4.0;
+      ) / 4.0; */
+      float lightColor = 0.5;
+
       vec3 outgoingLight = diffuseColor * (0.2 + lightColor * 0.8);
       gl_FragColor = vec4(outgoingLight, 0.9);
     }
@@ -467,11 +469,11 @@ const heightfieldMaterial = new THREE.ShaderMaterial({
 const _getChunkMesh = (x, z) => {
   const allocator = new Allocator();
 
-  const terrainBuffer = new Uint32Array(TERRAIN_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
+  /* const terrainBuffer = new Uint32Array(TERRAIN_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
   const objectBuffer = new Uint32Array(OBJECT_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
   const vegetationBuffer = new Uint32Array(VEGETATION_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
   const blockBuffer = new Uint32Array(BLOCK_BUFFER_SIZE / Uint32Array.BYTES_PER_ELEMENT);
-  const lightBuffer = new Float32Array(LIGHT_BUFFER_SIZE / Float32Array.BYTES_PER_ELEMENT);
+  const lightBuffer = new Float32Array(LIGHT_BUFFER_SIZE / Float32Array.BYTES_PER_ELEMENT); */
 
   /* const oldTerrainBuffer = terrainBuffer;
   const oldTerrainData = protocolUtils.parseTerrainData(oldTerrainBuffer.buffer, oldTerrainBuffer.byteOffset);
@@ -570,36 +572,46 @@ const _getChunkMesh = (x, z) => {
   );
 
   const result = {
-    positions: positions.slice(),
-    indices: indices.slice(),
-    attributeRanges: attributeRanges.slice(),
-    indexRanges: indexRanges.slice(),
-    staticHeightfield: staticHeightfield.slice(),
-    colors: colors.slice(),
-    peeks: peeks.slice(),
+    positions: positions,
+    indices: indices,
+    attributeRanges: attributeRanges,
+    indexRanges: indexRanges,
+    // staticHeightfield: staticHeightfield.slice(),
+    colors: colors,
+    // peeks: peeks.slice(),
+    cleanup() {
+      allocator.freeAll();
+    },
   };
-
-  allocator.freeAll();
-
   return result;
 };
 // const meshes = [];
 const _addMesh = (x, z) => {
   const meshSpec = _getChunkMesh(x, z);
-  const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks} = meshSpec;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.setIndex(new THREE.BufferAttribute(indices, 3));
+  const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks, cleanup} = meshSpec;
 
   for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
     {
-      const g = geometry.clone();
+      const attrStart = attributeRanges[i * 6 + 0];
+      const attrLength = attributeRanges[i * 6 + 1];
       const indexStart = indexRanges[i * 6 + 0];
       const indexLength = indexRanges[i * 6 + 1];
-      g.setDrawRange(indexStart, indexLength);
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
-      const mesh = new THREE.Mesh(g, heightfieldMaterial);
+
+      const geometry = new THREE.BufferGeometry();
+      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+      const attrOffset = attrStart / 3;
+      for (let i = 0; i < is.length; i++) {
+        is[i] -= attrOffset;
+      }
+      geometry.setIndex(new THREE.BufferAttribute(is, 1));
+
+      renderer.getGeometries().update(geometry);
+
+      const mesh = new THREE.Mesh(geometry, heightfieldMaterial);
       mesh.visible = indexLength > 0;
       mesh.frustumCulled = false;
       // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
@@ -607,12 +619,26 @@ const _addMesh = (x, z) => {
       meshes.push(mesh);
     }
     {
-      const g = geometry.clone();
+      const attrStart = attributeRanges[i * 6 + 2];
+      const attrLength = attributeRanges[i * 6 + 3];
       const indexStart = indexRanges[i * 6 + 2];
       const indexLength = indexRanges[i * 6 + 3];
-      g.setDrawRange(indexStart, indexLength);
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
-      const mesh = new THREE.Mesh(g, oceanMaterial);
+
+      const geometry = new THREE.BufferGeometry();
+      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+      const attrOffset = attrStart / 3;
+      for (let i = 0; i < is.length; i++) {
+        is[i] -= attrOffset;
+      }
+      geometry.setIndex(new THREE.BufferAttribute(is, 1));
+
+      renderer.getGeometries().update(geometry);
+
+      const mesh = new THREE.Mesh(geometry, oceanMaterial);
       mesh.visible = indexLength > 0;
       mesh.frustumCulled = false;
       // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
@@ -620,12 +646,26 @@ const _addMesh = (x, z) => {
       meshes.push(mesh);
     }
     {
-      const g = geometry.clone();
+      const attrStart = attributeRanges[i * 6 + 4];
+      const attrLength = attributeRanges[i * 6 + 5];
       const indexStart = indexRanges[i * 6 + 4];
       const indexLength = indexRanges[i * 6 + 5];
-      g.setDrawRange(indexStart, indexLength);
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, i * NUM_CELLS, 0), new THREE.Vector3(NUM_CELLS, NUM_CELLS, NUM_CELLS).length());
-      const mesh = new THREE.Mesh(g, oceanMaterial);
+
+      const geometry = new THREE.BufferGeometry();
+      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+      const attrOffset = attrStart / 3;
+      for (let i = 0; i < is.length; i++) {
+        is[i] -= attrOffset;
+      }
+      geometry.setIndex(new THREE.BufferAttribute(is, 1));
+
+      renderer.getGeometries().update(geometry);
+
+      const mesh = new THREE.Mesh(geometry, oceanMaterial);
       mesh.visible = indexLength > 0;
       mesh.frustumCulled = false;
       // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
@@ -633,10 +673,13 @@ const _addMesh = (x, z) => {
       meshes.push(mesh);
     }
   }
+
+  cleanup();
 };
 window.meshes = [];
-for (let x = -2; x <= 2; x++) {
-  for (let z = -1; z <= 1; z++) {
+// _addMesh(0, 0);
+for (let x = -4; x <= 4; x++) {
+  for (let z = -4; z <= 4; z++) {
     console.log('add mesh', x, z);
     _addMesh(x, z);
   }
