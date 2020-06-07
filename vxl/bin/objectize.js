@@ -16,7 +16,9 @@ globalThis.wasmModule = (moduleName, moduleFn) => {
     globalThis.Module = moduleFn({
       print(text) { console.log(text); },
       printErr(text) { console.warn(text); },
-      wasmBinaryFile: 'objectize.wasm',
+      locateFile() {
+        return 'vxl/bin/objectize.wasm';
+      },
       onRuntimeInitialized: () => {
         promise.accept();
       },
