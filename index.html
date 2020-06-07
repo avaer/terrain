@@ -124,7 +124,7 @@ const PEEK_SIZE = 16 * Uint8Array.BYTES_PER_ELEMENT;
 const PEEKS_ARRAY_SIZE = PEEK_SIZE * NUM_CHUNKS_HEIGHT;
 
 (async () => {
-const {promise} = await import('./objectize.js');
+const {promise} = await import('./vxl/bin/objectize.js');
 await promise;
 
 const renderer = new THREE.WebGLRenderer({
