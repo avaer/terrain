@@ -600,7 +600,7 @@ const _getChunkMesh = (x, z) => {
 // const meshes = [];
 const _addMesh = (x, z) => {
   const meshSpec = _getChunkMesh(x, z);
-  console.log('mesh spec', meshSpec);
+  console.log('mesh spec', x, z, meshSpec);
   const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks, cleanup} = meshSpec;
 
   for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
@@ -702,7 +702,6 @@ window.meshes = [];
 // _addMesh(0, 0);
 for (let x = -4; x <= 4; x++) {
   for (let z = -4; z <= 4; z++) {
-    console.log('add mesh', x, z);
     _addMesh(x, z);
   }
 }
