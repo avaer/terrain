@@ -209,6 +209,10 @@ const HEIGHTFIELD_SHADER = {
       type: 'f',
       value: 0,
     },
+    /* cameraPosition: {
+      type: 'v3',
+      value: new THREE.Vector3(),
+    }, */
   },
   vertexShader: `\
     #define LOG2 1.442695
@@ -219,20 +223,22 @@ const HEIGHTFIELD_SHADER = {
     attribute float skyLightmap;
     attribute float torchLightmap;
 
-    // varying vec3 vPosition;
+    varying vec3 vPosition;
     varying vec3 vViewPosition;
     varying vec3 vColor;
+    varying vec3 vNormal;
     // varying float vSkyLightmap;
     // varying float vTorchLightmap;
     // varying float vFog;
 
     void main() {
-      vColor = color.rgb;
+      vColor = color;
+      vNormal = normal;
 
       vec4 mvPosition = modelViewMatrix * vec4( position.xyz, 1.0 );
       gl_Position = projectionMatrix * mvPosition;
 
-      // vPosition = position.xyz;
+      vPosition = position.xyz;
       vViewPosition = -mvPosition.xyz;
       // vSkyLightmap = skyLightmap;
       // vTorchLightmap = torchLightmap;
@@ -246,10 +252,12 @@ const HEIGHTFIELD_SHADER = {
     // uniform vec3 ambientLightColor;
     uniform float sunIntensity;
     uniform vec3 fogColor;
+    // uniform vec3 cameraPosition;
 
-    // varying vec3 vPosition;
+    varying vec3 vPosition;
     varying vec3 vViewPosition;
     varying vec3 vColor;
+    varying vec3 vNormal;
     // varying float vSkyLightmap;
     // varying float vTorchLightmap;
     // varying float vFog;
@@ -265,13 +273,19 @@ const HEIGHTFIELD_SHADER = {
       vec3 ambientLightColor = vec3(0.5, 0.5, 0.5);
       float lightColor = 0.5;
 
-      vec3 fdx = vec3( dFdx( vViewPosition.x ), dFdx( vViewPosition.y ), dFdx( vViewPosition.z ) );
+      /* vec3 fdx = vec3( dFdx( vViewPosition.x ), dFdx( vViewPosition.y ), dFdx( vViewPosition.z ) );
       vec3 fdy = vec3( dFdy( vViewPosition.x ), dFdy( vViewPosition.y ), dFdy( vViewPosition.z ) );
-      vec3 normal = normalize( cross( fdx, fdy ) );
-      float dotNL = saturate( dot( normal, normalize(vViewPosition)) );
-      vec3 irradiance = ambientLightColor + (dotNL * 1.5);
+      vec3 normal = normalize( cross( fdx, fdy ) ); */
+      float dotNL = saturate( dot( vNormal, normalize(vViewPosition)) );
+      vec3 irradiance = ambientLightColor + dotNL * 0.1;
       vec3 diffuseColor = vColor * irradiance * (0.1 + lightColor * 0.9);
       // diffuseColor = mix(diffuseColor, fogColor, vFog);
+
+      diffuseColor *= 1.0 +
+        pow(
+          min(max((vPosition.y - 32.0) / 64.0, 0.0), 1.0),
+          1.0
+        ) * 5.0;
 
       gl_FragColor = vec4( diffuseColor, 1.0 );
     }
@@ -588,6 +602,7 @@ const _getChunkMesh = (x, z) => {
 // const meshes = [];
 const _addMesh = (x, z) => {
   const meshSpec = _getChunkMesh(x, z);
+  console.log('mesh spec', meshSpec);
   const {positions, indices, attributeRanges, indexRanges, staticHeightfield, colors, peeks, cleanup} = meshSpec;
 
   for (let i = 0; i < NUM_CHUNKS_HEIGHT; i++) {
@@ -597,26 +612,29 @@ const _addMesh = (x, z) => {
       const indexStart = indexRanges[i * 6 + 0];
       const indexLength = indexRanges[i * 6 + 1];
 
-      const geometry = new THREE.BufferGeometry();
-      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
-      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
-      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
-      const attrOffset = attrStart / 3;
-      for (let i = 0; i < is.length; i++) {
-        is[i] -= attrOffset;
+      if (indexLength > 0) {
+        const geometry = new THREE.BufferGeometry();
+        const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+        const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+        const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+        const attrOffset = attrStart / 3;
+        for (let i = 0; i < is.length; i++) {
+          is[i] -= attrOffset;
+        }
+        geometry.setIndex(new THREE.BufferAttribute(is, 1));
+        geometry.computeVertexNormals();
+
+        renderer.getGeometries().update(geometry);
+
+        const mesh = new THREE.Mesh(geometry, heightfieldMaterial);
+        mesh.visible = indexLength > 0;
+        mesh.frustumCulled = false;
+        // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+        scene.add(mesh);
+        meshes.push(mesh);
       }
-      geometry.setIndex(new THREE.BufferAttribute(is, 1));
-
-      renderer.getGeometries().update(geometry);
-
-      const mesh = new THREE.Mesh(geometry, heightfieldMaterial);
-      mesh.visible = indexLength > 0;
-      mesh.frustumCulled = false;
-      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-      scene.add(mesh);
-      meshes.push(mesh);
     }
     {
       const attrStart = attributeRanges[i * 6 + 2];
@@ -624,26 +642,29 @@ const _addMesh = (x, z) => {
       const indexStart = indexRanges[i * 6 + 2];
       const indexLength = indexRanges[i * 6 + 3];
 
-      const geometry = new THREE.BufferGeometry();
-      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
-      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
-      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
-      const attrOffset = attrStart / 3;
-      for (let i = 0; i < is.length; i++) {
-        is[i] -= attrOffset;
+      if (indexLength > 0) {
+        const geometry = new THREE.BufferGeometry();
+        const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+        const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+        const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+        const attrOffset = attrStart / 3;
+        for (let i = 0; i < is.length; i++) {
+          is[i] -= attrOffset;
+        }
+        geometry.setIndex(new THREE.BufferAttribute(is, 1));
+        geometry.computeVertexNormals();
+
+        renderer.getGeometries().update(geometry);
+
+        const mesh = new THREE.Mesh(geometry, oceanMaterial);
+        mesh.visible = indexLength > 0;
+        mesh.frustumCulled = false;
+        // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+        scene.add(mesh);
+        meshes.push(mesh);
       }
-      geometry.setIndex(new THREE.BufferAttribute(is, 1));
-
-      renderer.getGeometries().update(geometry);
-
-      const mesh = new THREE.Mesh(geometry, oceanMaterial);
-      mesh.visible = indexLength > 0;
-      mesh.frustumCulled = false;
-      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-      scene.add(mesh);
-      meshes.push(mesh);
     }
     {
       const attrStart = attributeRanges[i * 6 + 4];
@@ -651,26 +672,29 @@ const _addMesh = (x, z) => {
       const indexStart = indexRanges[i * 6 + 4];
       const indexLength = indexRanges[i * 6 + 5];
 
-      const geometry = new THREE.BufferGeometry();
-      const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
-      const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
-      geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
-      const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
-      const attrOffset = attrStart / 3;
-      for (let i = 0; i < is.length; i++) {
-        is[i] -= attrOffset;
+      if (indexLength > 0) {
+        const geometry = new THREE.BufferGeometry();
+        const ps = new Float32Array(positions.buffer, positions.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('position', new THREE.BufferAttribute(ps, 3));
+        const cs = new Float32Array(colors.buffer, colors.byteOffset + attrStart * Float32Array.BYTES_PER_ELEMENT, attrLength);
+        geometry.setAttribute('color', new THREE.BufferAttribute(cs, 3));
+        const is = new Uint32Array(indices.buffer, indices.byteOffset + indexStart * Uint32Array.BYTES_PER_ELEMENT, indexLength);
+        const attrOffset = attrStart / 3;
+        for (let i = 0; i < is.length; i++) {
+          is[i] -= attrOffset;
+        }
+        geometry.setIndex(new THREE.BufferAttribute(is, 1));
+        geometry.computeVertexNormals();
+
+        renderer.getGeometries().update(geometry);
+
+        const mesh = new THREE.Mesh(geometry, oceanMaterial);
+        mesh.visible = indexLength > 0;
+        mesh.frustumCulled = false;
+        // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
+        scene.add(mesh);
+        meshes.push(mesh);
       }
-      geometry.setIndex(new THREE.BufferAttribute(is, 1));
-
-      renderer.getGeometries().update(geometry);
-
-      const mesh = new THREE.Mesh(geometry, oceanMaterial);
-      mesh.visible = indexLength > 0;
-      mesh.frustumCulled = false;
-      // mesh.position.set(-x*NUM_CELLS, 0, -z*NUM_CELLS);
-      scene.add(mesh);
-      meshes.push(mesh);
     }
   }
 
@@ -710,6 +734,15 @@ scene.add(liquidObject); */
 
 function animate() {
   orbitControls.update();
+
+  /* const vrCamera = renderer.xr.getCamera(camera);
+  const p = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  const s = new THREE.Vector3();
+  vrCamera.cameras[0].matrix.decompose(p, q, s);
+  HEIGHTFIELD_SHADER.uniforms.cameraPosition.value.copy(p); */
+
+  // HEIGHTFIELD_SHADER.uniforms.cameraPosition.value.copy(camera.position);
 
   renderer.render(scene, camera);
 }
