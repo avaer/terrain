@@ -13,7 +13,7 @@ const RANGE = 11;
 
 const TEXTURE_SIZE = 1024;
 
-const DEFAULT_SEED = 'a';
+const DEFAULT_SEED = 'a17';
 
 const NUM_POSITIONS_CHUNK = 1 * 1024 * 1024;
 
