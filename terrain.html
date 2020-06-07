@@ -13,8 +13,8 @@
   <header class=header id=header>
     <a href="/" class="nav icon">山</a>
     <nav class="selector nav bar" id=selector>
-      <i class="fa fa-user head"></i>
-      <div class=header-label id=header-label>Log in</div>
+      <i class="fa fa-solar-system head"></i>
+      <div class=header-label id=header-label>Terrain</div>
       <i class="fa fa-chevron-down tail"></i>
       <div class=selections id=selections>
         <a href="run.html" class=selection id=run-mode>
@@ -47,31 +47,6 @@
         </a>
       </div>
     </nav>
-
-    <form class="login-form phase-1" id=login-form>
-      <div class=phase-content>
-        <div class=login-notice id=login-notice></div>
-        <div class=login-error id=login-error></div>
-      </div>
-      <div class="phase-content phase-1-content">
-        <input type=email placeholder="your@email.com" id=login-email>
-        <input type=submit value="Log in" class="button highlight">
-      </div>
-      <div class="phase-content phase-2-content">
-        <input type=text placeholder="Verification code" id=login-verification-code>
-        <input type=submit value="Verify" class="button highlight">
-      </div>
-      <div class="phase-content phase-3-content">
-        <nav class=user-button id=user-button>
-          <img src="favicon.ico">
-          <span class=name id=login-email-static></span>
-          <input type=submit value="Log out" class="button highlight">
-        </nav>
-      </div>
-      <div class="phase-content phaseless-content">
-        <div>Working...</div>
-      </div>
-    </form>
   </header>
 
 <script type=module>
@@ -164,7 +139,7 @@ renderer.xr.enabled = true;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 2);
+camera.position.set(0, 100, 64);
 
 const orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.screenSpacePanning = true;
@@ -283,7 +258,7 @@ const HEIGHTFIELD_SHADER = {
 
       diffuseColor *= 1.0 +
         pow(
-          min(max((vPosition.y - 32.0) / 64.0, 0.0), 1.0),
+          min(max((vPosition.y - 50.0) / 64.0, 0.0), 1.0),
           1.0
         ) * 5.0;
 
