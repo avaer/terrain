@@ -354,6 +354,30 @@ void Noiser::applyEther(float *newEther, unsigned int numNewEthers, float *ether
   }
 }
 
+void remap(float *positionsBuffer, unsigned int *indicesBuffer, int startAttributeIndex, int startIndexIndex, int endAttributeIndex, int endIndexIndex) {
+  int ii = startIndexIndex;
+  for (; ii < endIndexIndex;) {
+    const float &x = positionsBuffer[indicesBuffer[ii]*3];
+    const float &y = positionsBuffer[indicesBuffer[ii]*3+1];
+    const float &z = positionsBuffer[indicesBuffer[ii]*3+2];
+
+    int ii2 = ii+1;
+    for (; ii2 < endIndexIndex;) {
+      const float &x2 = positionsBuffer[indicesBuffer[ii2]*3];
+      const float &y2 = positionsBuffer[indicesBuffer[ii2]*3+1];
+      const float &z2 = positionsBuffer[indicesBuffer[ii2]*3+2];
+
+      if (x == x2 && y == y2 && z == z2) {
+        indicesBuffer[ii2] = indicesBuffer[ii];
+      }
+
+      ii2++;
+    }
+
+    ii++;
+  }
+}
+
 void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *lava, float *positionsBuffer, unsigned int *indicesBuffer, unsigned int *attributeRanges, unsigned int *indexRanges) {
   int attributeIndex = 0;
   int indexIndex = 0;
@@ -384,6 +408,8 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
     attributeRanges[i * 6 + 1] = positionIndex;
     indexRanges[i * 6 + 0] = indexIndex;
     indexRanges[i * 6 + 1] = faceIndex,
+
+    remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
 
     attributeIndex += positionIndex;
     indexIndex += faceIndex;
@@ -417,6 +443,8 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
       indexRanges[i * 6 + 2] = indexIndex;
       indexRanges[i * 6 + 3] = faceIndex;
 
+      remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
+
       attributeIndex += positionIndex;
       indexIndex += faceIndex;
     }
@@ -446,6 +474,8 @@ void Noiser::makeGeometries(int ox, int oy, float *ether, float *water, float *l
       attributeRanges[i * 6 + 5] = positionIndex;
       indexRanges[i * 6 + 4] = indexIndex;
       indexRanges[i * 6 + 5] = faceIndex;
+
+      remap(positionsBuffer, indicesBuffer, attributeIndex, indexIndex, attributeIndex + positionIndex, indexIndex + faceIndex);
 
       attributeIndex += positionIndex;
       indexIndex += faceIndex;
