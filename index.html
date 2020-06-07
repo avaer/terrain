@@ -137,6 +137,7 @@ renderer.sortObjects = false;
 renderer.physicallyCorrectLights = true;
 renderer.xr.enabled = true;
 document.body.appendChild(renderer.domElement);
+renderer.domElement.style.backgroundColor = '#000';
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 100, 64);
