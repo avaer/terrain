@@ -558,7 +558,7 @@ void Noiser::fill(int ox, int oz, unsigned char *biomes, float *elevations, floa
   this->makeGeometries(ox, oz, ethers, water, lava, positions, indices, attributeRanges, indexRanges);
 
   unsigned int numIndices = indexRanges[5 * 6 + 4] + indexRanges[5 * 6 + 5];
-  genHeightfield(positions, indices, numIndices, staticHeightfield); // XXX can be optimized out, allowing single-pass offsetted geometry tesselation
+  // genHeightfield(positions, indices, numIndices, staticHeightfield); // XXX can be optimized out, allowing single-pass offsetted geometry tesselation
 
   this->postProcessGeometry(ox, oz, attributeRanges, positions, colors, biomes);
 
